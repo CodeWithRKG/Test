@@ -56,7 +56,7 @@ jobs:
       # 6. Create and set build directory based on current date/time
       - name: Configure Build Directory
         run: |
-          ROOT_DIR="${ROOT_DIR_PREFIX}-$(date +'%Y-%m-%d-%H-%M')-release"
+          ROOT_DIR="${ROOT_DIR_PREFIX}-$(date +'%d-%m-%Y-%h-%m')-release"
           echo "ROOT_DIR=${ROOT_DIR}" >> $GITHUB_ENV
           mkdir -p "builds/${ROOT_DIR}"
           cd "builds/${ROOT_DIR}"
@@ -194,6 +194,20 @@ jobs:
             --user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom \
             --ignore_missing_projects \
             -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
+      # 14. Create the zip package containing the built kernel image
+      - name: Create ZIP Package
+        working-directory: builds/${{ env.ROOT_DIR }}
+        run: |
+          if [ ! -f kernel_platform/oneplusNord4_v/kernel_platform/out/dist/Image ]; then
+            echo "❌ Kernel image not found"
+            exit 1
+          fi
+          cp kernel_platform/oneplusNord4_v/kernel_platform/out/dist/Image AnyKernel3/Image || { echo "❌ Failed to copy kernel image"; exit 1; }
+          cd AnyKernel3
+          ZIP_NAME="OPNord4-KSU-${KSUVER}.zip"
+          echo "📦 Creating zip file: $ZIP_NAME"
+          ls -lh "../$ZIP_NAME"
+          echo "zip_name=$ZIP_NAME" >> $GITHUB_ENV
       # 15. Upload the generated zip file as an artifact
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
