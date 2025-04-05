@@ -193,7 +193,7 @@ jobs:
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplusNord4_v
         run: |
           cd kernel_platform
-          export LTO=full
+          export LTO=thin
           mkdir -p out
           export PATH="/usr/lib/ccache:$PATH"
           ./build_with_bazel.py \
