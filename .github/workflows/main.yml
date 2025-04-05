@@ -198,19 +198,14 @@ jobs:
       - name: Create ZIP Package
         working-directory: builds/${{ env.ROOT_DIR }}
         run: |
-          if [ ! -f kernel_platform/oneplusNord4_v/kernel_platform/out/dist/Image ]; then
+          if [ ! -f kernel_platform/oneplus13r_v/kernel_platform/out/dist/Image ]; then
             echo "❌ Kernel image not found"
             exit 1
           fi
-          cp kernel_platform/oneplusNord4_v/kernel_platform/out/dist/Image AnyKernel3/Image || { echo "❌ Failed to copy kernel image"; exit 1; }
-          cd AnyKernel3
-          ZIP_NAME="OPNord4-KSU-${KSUVER}.zip"
-          echo "📦 Creating zip file: $ZIP_NAME"
-          ls -lh "../$ZIP_NAME"
-          echo "zip_name=$ZIP_NAME" >> $GITHUB_ENV
+          cp kernel_platform/oneplus13r_v/kernel_platform/out/dist/Image AnyKernel3/Image || { echo "❌ Failed to copy kernel image"; exit 1; }
       # 15. Upload the generated zip file as an artifact
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kernel-${{ env.ROOT_DIR }}
-          path: builds/${{ env.ROOT_DIR }}/*.zip
+          path: builds/${{ env.ROOT_DIR }}/AnyKernel3
