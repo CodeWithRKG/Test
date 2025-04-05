@@ -13,12 +13,6 @@ env:
   BRANCH: "android14-6.1"
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-permissions:
-  contents: write
-  packages: write
-  issues: write
-  deployments: write
-
 jobs:
   build-release:
     runs-on: ubuntu-latest
@@ -35,7 +29,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -qq curl
           curl -fsSL https://raw.githubusercontent.com/kou/arrow/e49d8ae15583ceff03237571569099a6ad62be32/ci/scripts/util_free_space.sh | bash
-
       # 3. Install required system packages (combine updates to minimize repetition)
       - name: Setup Build Environment
         run: |
@@ -44,7 +37,6 @@ jobs:
             python3-pip curl git zip unzip gcc g++ make ninja-build file \
             bc bison flex libssl-dev libelf-dev wget build-essential \
             python3-dev python3-setuptools rsync ccache cmake libdw-dev zlib1g-dev
-
       # 4. Configure ccache to speed up recompilations
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -62,7 +54,6 @@ jobs:
           echo "$HOME/.bin" >> $GITHUB_PATH
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-
       # 6. Create and set build directory based on current date/time
       - name: Configure Build Directory
         run: |
@@ -70,7 +61,6 @@ jobs:
           echo "ROOT_DIR=${ROOT_DIR}" >> $GITHUB_ENV
           mkdir -p "builds/${ROOT_DIR}"
           cd "builds/${ROOT_DIR}"
-
       # 7. Clone required repositories (using shallow clone for speed)
       - name: Clone Required Repositories
         working-directory: builds/${{ env.ROOT_DIR }}
@@ -84,7 +74,6 @@ jobs:
             echo "Cloning ${repo}"
             git clone $repo || { echo "Failed to clone $repo"; exit 1; }
           done
-
       # 8. Initialize and sync the kernel source via Repo tool
       - name: Setup Kernel Source
         working-directory: builds/${{ env.ROOT_DIR }}
@@ -94,7 +83,6 @@ jobs:
           repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm7675 -m oneplus_nord_4_v.xml --depth=1 || { echo "Failed to initialize repo"; exit 1; }
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags || { echo "Failed to sync repo"; exit 1; }
           rm -rf ./kernel_platform/common/android/abi_gki_protected_exports_*
-
       # 9. Setup KernelSU (fetch, update submodules, and adjust versioning)
       - name: Setup KernelSU
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplusNord4_v/kernel_platform
@@ -106,7 +94,6 @@ jobs:
           KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) + 10200)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
-
       # 10. Setup SUSFS (clone additional repositories, copy files, patch as needed)
       - name: Setup SUSFS
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplusNord4_v/kernel_platform
@@ -130,7 +117,6 @@ jobs:
             patch -p1 -F 3 < 69_hide_stuff.patch || true
           fi
           patch -p1 -F 3 < syscall_hooks.patch || true
-
       # 11. Append required configuration settings to gki_defconfig
       - name: Configure Kernel
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplusNord4_v/kernel_platform
@@ -154,7 +140,7 @@ jobs:
             "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y"
             "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y"
             "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
-            "CONFIG_KSU_SUS_SU=n"
+            "CONFIG_KSU_SUSFS_SUS_SU=n"
             # Filesystem
             "CONFIG_TMPFS_XATTR=y"
             "CONFIG_TMPFS_POSIX_ACL=y"
@@ -179,7 +165,6 @@ jobs:
             echo "$CONFIG" >> ./common/arch/arm64/configs/gki_defconfig
           done
           sed -i '2s/check_defconfig//' ./common/build.config.gki
-
       # 12. Run sed modifications to enable LTO and remove "-dirty" markers
       - name: Run sed Commands
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplusNord4_v/kernel_platform
@@ -193,7 +178,6 @@ jobs:
           sed -i 's/-dirty//' ./msm-kernel/scripts/setlocalversion
           sed -i 's/-dirty//' ./external/dtc/scripts/setlocalversion
           sed -i 's/-dirty//' ./build/kernel/kleaf/workspace_status_stamp.py || echo "No workspace_status_stamp.py!"
-
       # 13. Build the kernel using Bazel with LTO enabled
       - name: Build Kernel
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplusNord4_v
@@ -211,7 +195,6 @@ jobs:
             --user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom \
             --ignore_missing_projects \
             -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
-
       # 14. Create the zip package containing the built kernel image
       - name: Create ZIP Package
         working-directory: builds/${{ env.ROOT_DIR }}
@@ -221,35 +204,9 @@ jobs:
             exit 1
           fi
           cp kernel_platform/oneplusNord4_v/kernel_platform/out/dist/Image AnyKernel3/Image || { echo "❌ Failed to copy kernel image"; exit 1; }
-
       # 15. Upload the generated zip file as an artifact
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Susfs_Patched_Kernel-${{ env.ROOT_DIR }}
           path: builds/${{ env.ROOT_DIR }}/AnyKernel3
-
-      # 16. Create a GitHub release
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.ROOT_DIR }}
-          release_name: "Release ${{ env.ROOT_DIR }}"
-          body: |
-            This is the release of the kernel build.
-          draft: false
-          prerelease: false
-
-      # 17. Upload the ZIP package to the release
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: builds/${{ env.ROOT_DIR }}/AnyKernel3.zip
-          asset_name: Susfs_Patched_Kernel-${{ env.ROOT_DIR }}.zip
-          asset_content_type: application/zip
